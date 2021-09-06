@@ -25,7 +25,7 @@ namespace EventFlowExample.Aggregates
         }
 
         #region Snapshots
-        public const int SnapshotEveryVersion = 100;
+        public const int SnapshotEveryVersion = 5;
         public IReadOnlyCollection<ExampleSnapshotVersion> SnapshotVersions { get; private set; } = new ExampleSnapshotVersion[] { };
 
         protected override Task<ExampleSnaphost> CreateSnapshotAsync(CancellationToken cancellationToken)

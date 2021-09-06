@@ -58,7 +58,7 @@ namespace EventFlowExample
                                                   .ConfigureMongoDb(client, SNAPSHOT_CONTAINER_NAME)
                                                   .AddSnapshots(typeof(ExampleSnaphost))
                                                   .UseMongoDbSnapshotStore()
-                                                  .RegisterServices(sr => sr.Register(i => SnapshotEveryFewVersionsStrategy.Default))
+                                                  .RegisterServices(sr => sr.Register(i => SnapshotEveryFewVersionsStrategy.Default)) //Overriden by ExampleAggregate
                                                   .RegisterServices(DecorateCommandBus)
                                                   .PublishToRabbitMq(RabbitMqConfiguration.With(new Uri(@"amqp://test:test@localhost:5672"), true, 4, "eventflow"))
                                                   //.ConfigureSagas()
