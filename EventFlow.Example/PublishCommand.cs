@@ -19,6 +19,15 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using EventFlow.Aggregates;
+using EventFlow.Hangfire.Extensions;
+using EventFlow.Subscribers;
+using EventFlowExample.Aggregates;
+using EventFlowExample.Aggregates.Sagas;
+using EventFlowExample.Aggregates.Subscribers;
+using Hangfire;
+using Hangfire.PostgreSql;
+using Microsoft.Extensions.Hosting;
 
 namespace EventFlowExample
 {
@@ -44,36 +53,36 @@ namespace EventFlowExample
         public async Task PublishCommandAsync()
         {
             var client = new MongoClient("mongodb://localhost:27017");
-
+            JobStorage.Current = new PostgreSqlStorage("Host=localhost;Port=5433;Database=testdb;User ID=dbadmin;Password=dbadmin;");
+            
             using (var resolver = EventFlowOptions.New
-                                                  .UseAutofacContainerBuilder(new ContainerBuilder()) // Must be the first line!
-                                                  .Configure(c => c.ThrowSubscriberExceptions = true)
-                                                  .AddEvents(typeof(ExampleEvent))
-                                                  .AddEvents(typeof(ResetEvent))
-                                                  .AddCommands(typeof(ExampleCommand))
-                                                  .AddCommands(typeof(ResetCommand))
-                                                  .AddCommandHandlers(typeof(ExampleCommandHandler))
-                                                  .AddCommandHandlers(typeof(ResetCommandHandler))
-                                                  .ConfigureEventStore()
-                                                  .ConfigureMongoDb(client, SNAPSHOT_CONTAINER_NAME)
-                                                  .AddSnapshots(typeof(ExampleSnaphost))
-                                                  .UseMongoDbSnapshotStore()
-                                                  .RegisterServices(sr => sr.Register(i => SnapshotEveryFewVersionsStrategy.Default)) //Overriden by ExampleAggregate
-                                                  .RegisterServices(DecorateCommandBus)
-                                                  .PublishToRabbitMq(RabbitMqConfiguration.With(new Uri(@"amqp://test:test@localhost:5672"), true, 4, "eventflow"))
-                                                  //.ConfigureSagas()
-                                                  //.UseNullLog()
-                                                  //.UseInMemoryReadStoreFor<Aggregates.ReadModels.ExampleReadModel>()
-                                                  .Configure(c => c.IsAsynchronousSubscribersEnabled = true)
-                                                  //.AddAsynchronousSubscriber<ExampleAggregate, Aggregates.Events.ExampleId, ExampleEvent, RabbitMqConsumePersistanceService>()
-                                                  //.RegisterServices(s => {
-                                                  //    s.Register<IHostedService, RabbitConsumePersistenceService>(Lifetime.Singleton);
-                                                  //    s.Register<IHostedService, RabbitMqConsumePersistanceService>(Lifetime.Singleton);
-                                                  //})
-                                                  //.AddSubscribers(new Type[] { typeof(ExampleSyncSubscriber) })
-                                                 // .UseHangfireJobScheduler()
-                                                  .AddJobs(typeof(ExampleJob))
-                                                  .CreateResolver())
+                .UseAutofacContainerBuilder(new ContainerBuilder()) // Must be the first line!
+                .Configure(c => c.ThrowSubscriberExceptions = true)
+                .AddEvents(typeof(ExampleEvent))
+                .AddEvents(typeof(ResetEvent))
+                .AddCommands(typeof(ExampleCommand))
+                .AddCommands(typeof(ResetCommand))
+                .AddCommandHandlers(typeof(ExampleCommandHandler))
+                .AddCommandHandlers(typeof(ResetCommandHandler))
+                .ConfigureEventStore()
+                .ConfigureMongoDb(client, SNAPSHOT_CONTAINER_NAME)
+                .AddSnapshots(typeof(ExampleSnaphost))
+                .UseMongoDbSnapshotStore()
+                .RegisterServices(sr =>
+                    sr.Register(i => SnapshotEveryFewVersionsStrategy.Default)) //Overriden by ExampleAggregate
+                .RegisterServices(DecorateCommandBus)
+                .PublishToRabbitMq(RabbitMqConfiguration.With(new Uri(@"amqp://test:test@localhost:5672"), true, 4,
+                    "eventflow")) // username password: test test
+                //.ConfigureSagas()
+                //.UseNullLog()
+                .UseInMemoryReadStoreFor<Aggregates.ReadModels.ExampleReadModel>()
+                .Configure(c => c.IsAsynchronousSubscribersEnabled = true)
+                .AddAsynchronousSubscriber<ExampleAggregate, ExampleId, ExampleEvent,
+                    ExampleSyncSubscriber>()
+                .AddSubscribers(new Type[] {typeof(ExampleSyncSubscriber)})
+                .UseHangfireJobScheduler()
+                .AddJobs(typeof(ExampleJob))
+                .CreateResolver())
             {
                 Int32 magicNumber = 2;
                 CommandBus = resolver.Resolve<ICommandBus>();
@@ -83,13 +92,15 @@ namespace EventFlowExample
 
                 ExampleId exampleId = GetStreamName("Tenant", "EXAMPLE");
 
-                for (int i = 0; i < 1; i++)
+                for (int i = 0; i < 100; i++)
                 {
 
                     IExecutionResult result = await CommandBus.PublishAsync(
-                        new ExampleCommand(exampleId, magicNumber), CancellationToken.None)
+                            new ExampleCommand(exampleId, magicNumber), CancellationToken.None)
                         .ConfigureAwait(false);
+
                     #region Comments
+
                     //result.IsSuccess.Should().BeTrue();
 
                     //IAggregateStore aggregateStore = resolver.Resolve<IAggregateStore>();
@@ -108,6 +119,7 @@ namespace EventFlowExample
 
                     //// Verify that the read model has the expected magic number
                     //exampleReadModel.MagicNumber.Should().Be(42);
+
                     #endregion
                 }
 
